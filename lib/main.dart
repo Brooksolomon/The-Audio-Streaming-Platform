@@ -1,7 +1,13 @@
+import 'dart:async';
 import 'dart:ui';
 import 'package:audiobinge/downloadUtils.dart';
 import 'package:audiobinge/downloadsPage.dart';
+import 'package:audiobinge/thumbnailUtils.dart';
 import 'package:just_audio_background/just_audio_background.dart';
+import 'package:receive_sharing_intent/receive_sharing_intent.dart';
+import 'package:youtube_scrape_api/models/thumbnail.dart';
+import 'package:youtube_scrape_api/models/video_data.dart';
+import 'package:youtube_scrape_api/youtube_scrape_api.dart';
 
 import 'fetchYoutubeStreamUrl.dart';
 import 'package:flutter/material.dart';
@@ -17,6 +23,7 @@ import 'MyVideo.dart';
 import 'colors.dart';
 import 'videoComponent.dart';
 import 'favoriteUtils.dart';
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await JustAudioBackground.init(
@@ -38,10 +45,9 @@ class Playing with ChangeNotifier {
   MyVideo _video = MyVideo();
   List<MyVideo> _queue = [];
   ConcatenatingAudioSource _playlist =
-  ConcatenatingAudioSource(children: []); // Initialize playlist
+      ConcatenatingAudioSource(children: []); // Initialize playlist
   List<ytex.ClosedCaption> captions = [];
   String currentCaption = "no caption fo this media";
-
 
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
@@ -133,7 +139,6 @@ class Playing with ChangeNotifier {
       }
     });
 
-
     _audioPlayer.currentIndexStream.listen((index) async {
       if (index != null && index >= 0 && index < _queue.length) {
         _video = _queue[index];
@@ -194,7 +199,6 @@ class Playing with ChangeNotifier {
     notifyListeners();
     await play();
   }
-
 
   Future<void> addToQueue(MyVideo v) async {
     if (_queue.isEmpty) {
@@ -270,8 +274,6 @@ class Playing with ChangeNotifier {
     notifyListeners();
   }
 
-
-
   Future<void> next() async {
     if (_queue.isNotEmpty) {
       _isloading = true;
@@ -345,11 +347,13 @@ class Playing with ChangeNotifier {
     _isPlaying = true;
     notifyListeners();
   }
+
   Future<void> stop() async {
     await _audioPlayer.stop();
     _isPlaying = false;
     notifyListeners();
   }
+
   Future<void> seekAudio(Duration position) async {
     await _audioPlayer.seek(position);
   }
@@ -357,7 +361,6 @@ class Playing with ChangeNotifier {
   Future<AudioSource> createAudioSource(MyVideo v) async {
     var local = await isDownloaded(v);
     if (local) {
-
       return AudioSource.uri(
         Uri.file(v.localaudio!),
         tag: MediaItem(
@@ -371,11 +374,16 @@ class Playing with ChangeNotifier {
       );
     } else {
       var url = "hello";
-      if(await isFavorites(v)){
+      if (await isFavorites(v)) {
         url = v.localaudio!;
-      }else {
+      } else {
         url = await fetchYoutubeStreamUrl(v.videoId!);
       }
+      print('------------------------');
+      print(v.videoId);
+      print(v.channelName);
+      print(v.title);
+      print(v.thumbnails);
 
       return AudioSource.uri(
         Uri.parse(url),
@@ -398,8 +406,76 @@ class Playing with ChangeNotifier {
   }
 }
 
-class MyApp extends StatelessWidget {
+class Thumbnail2 {
+  String? url;
+  int? width, height;
+  Thumbnail2({this.url, this.width, this.height});
+}
+
+class MyApp extends StatefulWidget {
   const MyApp({super.key});
+
+  @override
+  State<MyApp> createState() => _MyAppState();
+}
+
+class _MyAppState extends State<MyApp> {
+  late StreamSubscription _intentSub;
+  final _sharedFiles = <SharedMediaFile>[];
+
+  @override
+  void initState() {
+    super.initState();
+
+    _intentSub = ReceiveSharingIntent.instance.getMediaStream().listen((value) {
+      setState(() {
+        _sharedFiles.clear();
+        _sharedFiles.addAll(value);
+
+        if (_sharedFiles.isNotEmpty) {
+          final videoId =
+              _sharedFiles.first.path.split('watch?v=').last.split('&').first;
+          addSharedVideo(videoId);
+        }
+
+        print(_sharedFiles.map((f) => f.toMap()));
+      });
+    });
+
+    ReceiveSharingIntent.instance.getInitialMedia().then((value) {
+      setState(() {
+        _sharedFiles.clear();
+        _sharedFiles.addAll(value);
+        print(_sharedFiles.map((f) => f.toMap()));
+
+        // Tell the library that we are done processing the intent.
+        ReceiveSharingIntent.instance.reset();
+      });
+    });
+  }
+
+  Future<void> addSharedVideo(String videoId) async {
+    YoutubeDataApi youtubeDataApi = YoutubeDataApi();
+    VideoData? sharedVideo = await youtubeDataApi.fetchVideoData(videoId);
+    // Thumbnail? highestThumbnail = getHighestQualityThumbnail(sharedVideo!.video.channelThumb);
+    print('-------------');
+    print('video data: ${sharedVideo!.video?.channelThumb}');
+
+    Provider.of<Playing>(context, listen: false).assign(
+        MyVideo(
+          videoId: videoId,
+          channelName: sharedVideo.video?.channelName,
+          title: sharedVideo.video?.title,
+          thumbnails: [Thumbnail(url: sharedVideo!.video?.channelThumb)]
+        ),
+        true);
+  }
+
+  @override
+  void dispose() {
+    _intentSub.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -475,8 +551,8 @@ class _YouTubeTwitchTabsState extends State<YouTubeTwitchTabs> {
               Positioned(
                 left: 0,
                 right: 0,
-                bottom:
-                    kBottomNavigationBarHeight +5 , // Position above the bottom nav
+                bottom: kBottomNavigationBarHeight +
+                    5, // Position above the bottom nav
                 child: Dismissible(
                   key: Key("bottomPlayer"),
                   direction: DismissDirection.startToEnd,

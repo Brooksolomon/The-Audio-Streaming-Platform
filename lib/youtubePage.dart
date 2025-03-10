@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:liquid_pull_to_refresh/liquid_pull_to_refresh.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:youtube_scrape_api/models/video.dart';
+import 'package:youtube_scrape_api/models/video_data.dart';
 import 'package:youtube_scrape_api/youtube_scrape_api.dart';
 import 'videoComponent.dart';
 import 'thumbnailUtils.dart';
@@ -89,6 +90,7 @@ class _YoutubeScreenState extends State<YoutubeScreen> {
   @override
   Widget build(BuildContext context) {
     bool isOnline = Provider.of<NetworkProvider>(context).isOnline;
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Column(
